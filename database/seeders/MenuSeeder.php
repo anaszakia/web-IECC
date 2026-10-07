@@ -26,25 +26,32 @@ class MenuSeeder extends Seeder
             'order' => 2,
         ]);
 
+        $incidentHistory = $this->menu([
+            'name'  => 'Riwayat Kejadian',
+            'url'   => '/incidents/history',
+            'icon'  => 'ti ti-history',
+            'order' => 3,
+        ]);
+
         $hospitalPortal = $this->menu([
             'name'  => 'Hospital Portal',
             'url'   => '/hospital-portal',
             'icon'  => 'ti ti-building-hospital',
-            'order' => 3,
+            'order' => 4,
         ]);
 
         $executiveDashboard = $this->menu([
             'name'  => 'Executive City Dashboard',
             'url'   => '/executive-dashboard',
             'icon'  => 'ti ti-chart-arrows-vertical',
-            'order' => 4,
+            'order' => 5,
         ]);
 
         $menuManagement = $this->menu([
             'name'  => 'Menu Management',
             'url'   => null,
             'icon'  => 'ti ti-menu-deep',
-            'order' => 5,
+            'order' => 6,
         ]);
 
         $children = [
@@ -85,7 +92,7 @@ class MenuSeeder extends Seeder
             ],
         ];
 
-        $menus = collect([$dashboard, $commandCenter, $hospitalPortal, $executiveDashboard, $menuManagement]);
+        $menus = collect([$dashboard, $commandCenter, $incidentHistory, $hospitalPortal, $executiveDashboard, $menuManagement]);
 
         foreach ($children as $child) {
             $menus->push($this->menu($child));
@@ -104,9 +111,9 @@ class MenuSeeder extends Seeder
             }
         }
 
-        // Operator gets Dashboard, Command Center, Hospital Portal
+        // Operator gets Dashboard, Command Center, Riwayat Kejadian, Hospital Portal
         if ($operator) {
-            $operator->menus()->syncWithoutDetaching([$dashboard->id, $commandCenter->id, $hospitalPortal->id]);
+            $operator->menus()->syncWithoutDetaching([$dashboard->id, $commandCenter->id, $incidentHistory->id, $hospitalPortal->id]);
         }
 
         // Hospital staff gets Hospital Portal & Dashboard
@@ -114,9 +121,9 @@ class MenuSeeder extends Seeder
             $hospitalStaff->menus()->syncWithoutDetaching([$dashboard->id, $hospitalPortal->id]);
         }
 
-        // Executive gets Executive City Dashboard & Dashboard
+        // Executive gets Executive City Dashboard, Riwayat Kejadian & Dashboard
         if ($executive) {
-            $executive->menus()->syncWithoutDetaching([$dashboard->id, $executiveDashboard->id]);
+            $executive->menus()->syncWithoutDetaching([$dashboard->id, $executiveDashboard->id, $incidentHistory->id]);
         }
     }
 

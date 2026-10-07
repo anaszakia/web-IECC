@@ -41,7 +41,7 @@ class AnalyzeIncidentJob implements ShouldQueue
                 ['incident_id' => $this->incident->id],
                 [
                     'provider'        => config('ai.provider', 'gemini'),
-                    'model'           => config('ai.gemini.model', 'gemini-2.5-flash'),
+                    'model'           => config('ai.gemini.model', 'gemini-3.8-flash'),
                     'category'        => $analysisResult['category'],
                     'incident_type'   => $analysisResult['incident_type'],
                     'severity'        => $analysisResult['severity'],
@@ -60,8 +60,9 @@ class AnalyzeIncidentJob implements ShouldQueue
             );
 
             // 3. Update data insiden dengan hasil AI
+            $shouldUpdateCategory = in_array($this->incident->category, ['UNKNOWN', 'AUTO', '', null]);
             $this->incident->update([
-                'category'        => $this->incident->category === 'UNKNOWN' ? $analysisResult['category'] : $this->incident->category,
+                'category'        => $shouldUpdateCategory ? $analysisResult['category'] : $this->incident->category,
                 'severity'        => $analysisResult['severity'],
                 'severity_source' => 'AI',
                 'incident_type'   => $analysisResult['incident_type'],
@@ -72,7 +73,7 @@ class AnalyzeIncidentJob implements ShouldQueue
             // 4. Hitung Rekomendasi Dispatch Unit
             $dispatchEngine->generateRecommendations($this->incident);
 
-            Log::info("AI Analysis & Dispatch selesai untuk: {$this->incident->incident_no}");
+            Log::info("AI Analysis & Dispatch selesai untuk: {$this->incident->incident_no} (Kategori: {$this->incident->category})");
 
         } catch (\Throwable $e) {
             Log::error("Gagal menjalankan AnalyzeIncidentJob: {$e->getMessage()}");

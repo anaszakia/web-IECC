@@ -22,5 +22,6 @@ Route::prefix('v1')->group(function () {
         Route::post('/assignments/{ulid}/status', [FieldOfficerController::class, 'updateStatus'])->name('api.v1.field.assignments.status');
         Route::post('/assignments/{ulid}/patient-handover', [FieldOfficerController::class, 'submitPatientHandover'])->name('api.v1.field.assignments.patient-handover');
         Route::post('/units/{ulid}/location', [FieldOfficerController::class, 'updateLocation'])->name('api.v1.field.units.location');
+        Route::post('/units/{ulid}/operational-status', [FieldOfficerController::class, 'updateUnitOperationalStatus'])->name('api.v1.field.units.operational-status');
     });
 });

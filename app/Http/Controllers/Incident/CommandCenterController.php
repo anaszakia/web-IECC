@@ -28,8 +28,8 @@ class CommandCenterController extends Controller
         if ($statusFilter) {
             $incidentsQuery->where('status', $statusFilter);
         } else {
-            // Default: Tampilkan insiden aktif (belum selesai/tutup)
-            $incidentsQuery->whereNotIn('status', ['CLOSED', 'CANCELLED', 'DUPLICATE', 'FALSE_REPORT']);
+            // Default: Tampilkan insiden aktif (belum selesai/tutup/resolved)
+            $incidentsQuery->whereNotIn('status', ['RESOLVED', 'CLOSED', 'CANCELLED', 'DUPLICATE', 'FALSE_REPORT']);
         }
 
         if ($categoryFilter) {
@@ -92,7 +92,7 @@ class CommandCenterController extends Controller
      */
     public function getActiveData(): JsonResponse
     {
-        $incidents = Incident::whereNotIn('status', ['CLOSED', 'CANCELLED', 'DUPLICATE', 'FALSE_REPORT'])
+        $incidents = Incident::whereNotIn('status', ['RESOLVED', 'CLOSED', 'CANCELLED', 'DUPLICATE', 'FALSE_REPORT'])
             ->with(['assignments.unit', 'media', 'aiAnalysis', 'dispatchRecommendations.unit'])
             ->orderBy('reported_at', 'desc')
             ->get();

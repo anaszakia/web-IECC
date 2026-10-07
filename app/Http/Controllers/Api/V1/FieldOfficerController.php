@@ -295,6 +295,52 @@ class FieldOfficerController extends Controller
     }
 
     /**
+     * POST /api/v1/field/units/{ulid}/operational-status
+     * Ubah status operasional unit armada (AVAILABLE, BUSY, OFFLINE, MAINTENANCE)
+     */
+    public function updateUnitOperationalStatus(Request $request, string $ulid): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'status'     => 'required|in:AVAILABLE,BUSY,OFFLINE,MAINTENANCE',
+            'crew_ready' => 'nullable|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['success' => false, 'errors' => $validator->errors()], 422);
+        }
+
+        $unit = Unit::whereUlid($ulid)->first();
+
+        if (!$unit) {
+            return response()->json(['success' => false, 'message' => 'Unit armada tidak ditemukan.'], 404);
+        }
+
+        $status = $request->input('status');
+        $updateData = ['status' => $status];
+
+        if ($request->has('crew_ready')) {
+            $updateData['crew_ready'] = $request->boolean('crew_ready');
+        } elseif ($status === 'AVAILABLE') {
+            $updateData['crew_ready'] = true;
+        } elseif ($status === 'OFFLINE') {
+            $updateData['crew_ready'] = false;
+        }
+
+        $unit->update($updateData);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Status unit berhasil diubah menjadi: {$status}",
+            'data'    => [
+                'ulid'       => $unit->ulid,
+                'code'       => $unit->code,
+                'status'     => $unit->status,
+                'crew_ready' => (bool) $unit->crew_ready,
+            ],
+        ]);
+    }
+
+    /**
      * POST /api/v1/field/assignments/{ulid}/patient-handover
      * Form Pre-Arrival Notification / Data Pasien Singkat ke Rumah Sakit (F-08 & G5)
      */

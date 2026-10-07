@@ -16,7 +16,7 @@ class GeminiAiProvider implements AiProviderInterface
     public function __construct()
     {
         $this->apiKey = config('ai.gemini.api_key', env('GEMINI_API_KEY', ''));
-        $this->model = config('ai.gemini.model', env('GEMINI_MODEL', 'gemini-2.5-flash'));
+        $this->model = config('ai.gemini.model', env('GEMINI_MODEL', 'gemini-3.8-flash'));
         $this->baseUrl = config('ai.gemini.base_url', env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'));
         $this->timeout = (int) config('ai.timeout', env('AI_TIMEOUT', 15));
     }
@@ -89,11 +89,16 @@ Estimasi Korban Awal: {$incident->victim_estimate}";
                 }
             }
 
-            // Langsung gunakan standard generateContent Gemini Flash yang sangat cepat (< 1.5 - 2 detik)
-            $modelName = $this->model ?: 'gemini-2.5-flash';
-            $url = "{$this->baseUrl}/models/{$modelName}:generateContent?key={$this->apiKey}";
+            // Standard Google Gemini Interactions API & generateContent compatibility
+            $modelName = $this->model ?: 'gemini-3.8-flash';
+            $interactionsUrl = "{$this->baseUrl}/interactions";
 
-            $response = Http::timeout($this->timeout)->post($url, [
+            // Sesuai dokumentasi resmi Gemini Interactions API:
+            // Mendukung baik parameter "input" (string/array) maupun "contents"
+            $interactionsPayload = [
+                'model' => $modelName,
+                'input' => $contentParts,
+                'system_instruction' => $systemInstruction,
                 'systemInstruction' => [
                     'parts' => [['text' => $systemInstruction]],
                 ],
@@ -108,33 +113,55 @@ Estimasi Korban Awal: {$incident->victim_estimate}";
                     'temperature'      => 0.1,
                     'maxOutputTokens'  => 800,
                 ],
-            ]);
+            ];
 
-            // Jika model utama gagal atau timeout, coba fallback cepat ke gemini-1.5-flash
-            if (!$response->successful() && $modelName !== 'gemini-1.5-flash') {
-                Log::warning("Gemini primary model {$modelName} returned status " . $response->status() . ", trying fallback gemini-1.5-flash...");
-                $fallbackUrl = "{$this->baseUrl}/models/gemini-1.5-flash:generateContent?key={$this->apiKey}";
-                $response = Http::timeout(6)->post($fallbackUrl, [
-                    'systemInstruction' => [
-                        'parts' => [['text' => $systemInstruction]],
-                    ],
-                    'contents' => [
-                        [
-                            'role'  => 'user',
-                            'parts' => $contentParts,
+            $response = Http::timeout($this->timeout)
+                ->withHeaders([
+                    'Content-Type'   => 'application/json',
+                    'x-goog-api-key' => $this->apiKey,
+                    'Api-Revision'   => '2026-05-20',
+                ])
+                ->post($interactionsUrl, $interactionsPayload);
+
+            // Fallback ke endpoint generateContent standar jika perlu
+            if (!$response->successful()) {
+                Log::info("Interactions API response status: " . $response->status() . " - body: " . substr($response->body(), 0, 200));
+                $generateUrl = "{$this->baseUrl}/models/{$modelName}:generateContent?key={$this->apiKey}";
+                $response = Http::timeout($this->timeout)
+                    ->withHeaders([
+                        'Content-Type'   => 'application/json',
+                        'x-goog-api-key' => $this->apiKey,
+                    ])
+                    ->post($generateUrl, [
+                        'systemInstruction' => [
+                            'parts' => [['text' => $systemInstruction]],
                         ],
-                    ],
-                    'generationConfig' => [
-                        'responseMimeType' => 'application/json',
-                        'temperature'      => 0.1,
-                        'maxOutputTokens'  => 800,
-                    ],
-                ]);
+                        'contents' => [
+                            [
+                                'role'  => 'user',
+                                'parts' => $contentParts,
+                            ],
+                        ],
+                        'generationConfig' => [
+                            'responseMimeType' => 'application/json',
+                            'temperature'      => 0.1,
+                            'maxOutputTokens'  => 800,
+                        ],
+                    ]);
             }
 
             if ($response && $response->successful()) {
                 $body = $response->json();
-                $rawText = $body['candidates'][0]['content']['parts'][0]['text'] ?? '{}';
+                
+                // Ekstraksi teks respon baik dari format Interactions API ("output" / "text") maupun generateContent ("candidates")
+                $rawText = '{}';
+                if (!empty($body['candidates'][0]['content']['parts'][0]['text'])) {
+                    $rawText = $body['candidates'][0]['content']['parts'][0]['text'];
+                } elseif (!empty($body['output'])) {
+                    $rawText = is_string($body['output']) ? $body['output'] : json_encode($body['output']);
+                } elseif (!empty($body['text'])) {
+                    $rawText = $body['text'];
+                }
 
                 // Bersihkan markdown fence jika ada
                 $cleanJson = trim($rawText);
@@ -214,12 +241,12 @@ Estimasi Korban Awal: {$incident->victim_estimate}";
                 ];
             }
 
-            Log::warning('Gemini API returned error or empty response');
-            return $this->heuristicFallback($incident, microtime(true) - $startTime, 'Gemini API Error');
+            Log::warning('Gemini API returned error or empty response: ' . ($response ? $response->body() : 'No response'));
+            return $this->heuristicFallback($incident, microtime(true) - $startTime, 'Gemini API status ' . ($response ? $response->status() : 'null'));
 
         } catch (\Throwable $e) {
             Log::warning('Gemini API call failed: ' . $e->getMessage());
-            return $this->heuristicFallback($incident, microtime(true) - $startTime, $e->getMessage());
+            return $this->heuristicFallback($incident, microtime(true) - $startTime, substr($e->getMessage(), 0, 240));
         }
     }
 
@@ -274,14 +301,14 @@ Estimasi Korban Awal: {$incident->victim_estimate}";
             'victim_estimate' => $critical ? 1 : 0,
             'critical_victim' => $critical,
             'required_units'  => $requiredUnits,
-            'summary'         => 'Klasifikasi aturan fallback: ' . substr($incident->description ?? 'Laporan diterima', 0, 150),
+            'summary'         => 'Klasifikasi cepat berbasis media/deskripsi: ' . substr($incident->description ?? 'Laporan diterima', 0, 150),
             'first_aid_key'   => $firstAid,
             'confidence'      => 0.70,
             'raw_response'    => ['fallback' => true],
             'latency_ms'      => (int) round($elapsedSeconds * 1000),
             'token_input'     => 0,
             'token_output'    => 0,
-            'error_message'   => $errorMessage,
+            'error_message'   => $errorMessage ? substr($errorMessage, 0, 240) : null,
         ];
     }
 }

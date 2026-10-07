@@ -65,6 +65,7 @@ Route::middleware(['auth.custom', 'auto.logout'])->group(function () {
     // Command Center IECC Portal
     Route::get('/command-center', [CommandCenterController::class, 'index'])->name('command-center.index');
     Route::get('/command-center/data', [CommandCenterController::class, 'getActiveData'])->name('command-center.data');
+    Route::get('/incidents/history', [\App\Http\Controllers\Incident\IncidentHistoryController::class, 'index'])->name('incidents.history');
     Route::get('/command-center/{ulid}', [CommandCenterController::class, 'show'])->name('command-center.show');
     Route::post('/command-center/{ulid}/verify', [CommandCenterController::class, 'verify'])->name('command-center.verify');
     Route::post('/command-center/{ulid}/dispatch', [CommandCenterController::class, 'dispatchUnit'])->name('command-center.dispatch');

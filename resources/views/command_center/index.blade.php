@@ -185,6 +185,10 @@ window.addEventListener('error', function(e) {
             </div>
         </div>
         <div class="d-flex align-items-center gap-2">
+            <a href="{{ route('incidents.history') }}" class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1 shadow-sm px-3 py-2">
+                <i class="ti ti-history fs-5"></i>
+                <span class="fw-bold">Riwayat Kejadian</span>
+            </a>
             <button id="btn-sound-toggle" type="button" class="btn btn-danger btn-sm d-flex align-items-center gap-2 shadow-sm px-3 py-2" onclick="window.testEmergencySound()">
                 <i class="ti ti-volume" id="sound-icon"></i>
                 <span id="sound-text" class="fw-bold">Tes Sirene Darurat</span>
@@ -236,7 +240,7 @@ window.addEventListener('error', function(e) {
         </div>
     </div>
     <div class="col-xl-3 col-md-6">
-        <div class="card card-lg shadow-sm border-0">
+        <div class="card card-lg shadow-sm border-0 cursor-pointer" onclick="window.location.href='{{ route('incidents.history') }}?status=RESOLVED'" style="cursor: pointer;">
             <div class="card-body d-flex justify-content-between align-items-center">
                 <div>
                     <span class="text-muted small fw-semibold">SELESAI (RESOLVED)</span>
@@ -445,10 +449,19 @@ window.addEventListener('error', function(e) {
         });
     }
 
+    var INACTIVE_STATUSES = ['RESOLVED', 'CLOSED', 'CANCELLED', 'DUPLICATE', 'FALSE_REPORT'];
+
     // Simpan data insiden, marker digambar per titik koordinat
     function drawIncidentMarker(inc) {
         if (!inc || inc.id === undefined || inc.id === null) return;
-        ccIncidentData[inc.id] = inc;
+        
+        // Jika status insiden sudah selesai/RESOLVED/CLOSED, hapus dari list data aktif
+        if (inc.status && INACTIVE_STATUSES.indexOf(inc.status) !== -1) {
+            delete ccIncidentData[inc.id];
+        } else {
+            ccIncidentData[inc.id] = inc;
+        }
+
         if (ccRenderTimer) return;
         ccRenderTimer = setTimeout(function() {
             ccRenderTimer = null;
@@ -485,7 +498,12 @@ window.addEventListener('error', function(e) {
 
         var list = Object.keys(ccIncidentData)
             .map(function(k) { return ccIncidentData[k]; })
-            .filter(function(i) { return !isNaN(parseFloat(i.lat)) && !isNaN(parseFloat(i.lng)); });
+            .filter(function(i) {
+                return i &&
+                    INACTIVE_STATUSES.indexOf(i.status) === -1 &&
+                    !isNaN(parseFloat(i.lat)) &&
+                    !isNaN(parseFloat(i.lng));
+            });
 
         var sig = list.map(function(i) {
             return i.id + '|' + i.status + '|' + i.severity + '|' + i.lat + '|' + i.lng;
