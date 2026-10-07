@@ -1,0 +1,48 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: web-iecc-app
+    restart: unless-stopped
+    ports:
+      - "80:80"       # Web HTTP & WebSocket proxy
+      - "8080:8080"   # Direct Reverb Port (optional)
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - RUN_MIGRATIONS=true # Set true jika ingin auto-migrate saat container start
+    env_file:
+      - .env
+    volumes:
+      - app_storage:/var/www/html/storage
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: postgres:16-alpine
+    container_name: web-iecc-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-web_iecc}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:alpine
+    container_name: web-iecc-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
+  app_storage:

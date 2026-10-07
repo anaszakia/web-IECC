@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: laravel-app
+    env: php
+    region: singapore
+    buildCommand: |
+      composer install --no-dev --optimize-autoloader
+      php artisan config:cache
+      php artisan route:cache
+      php artisan view:cache
+      php artisan migrate --force
+    startCommand: php artisan serve --host=0.0.0.0 --port=$PORT
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: false
+      - key: APP_KEY
+        generateValue: true
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_HOST
+        value: dpg-d859vc7avr4c73fclnvg-a
+      - key: DB_PORT
+        value: 5432
+      - key: DB_DATABASE
+        value: base_wpxk
+      - key: DB_USERNAME
+        value: root
+      - key: DB_PASSWORD
+        value: ylwT3wgAtMOssdEsygLuKqkQb1PsDFM0
+
+databases:
+  - name: laravel-base
