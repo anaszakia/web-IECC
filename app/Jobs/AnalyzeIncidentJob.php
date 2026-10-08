@@ -19,7 +19,7 @@ class AnalyzeIncidentJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 2;
-    public int $timeout = 15;
+    public int $timeout = 55;
 
     public function __construct(public Incident $incident)
     {
