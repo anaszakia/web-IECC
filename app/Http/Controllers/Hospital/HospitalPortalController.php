@@ -18,25 +18,69 @@ class HospitalPortalController extends Controller
         $user = auth()->user();
         $agencyId = $user?->agency_id;
 
-        // Ambil RS yang diasosiasikan dengan user RS atau RS pertama sebagai default
-        $hospital = Facility::where('type', 'HOSPITAL')
-            ->when($agencyId, fn($q) => $q->where('agency_id', $agencyId))
-            ->first() ?? Facility::where('type', 'HOSPITAL')->first();
+        // Ambil RS untuk informasi header (kapasitas bed, status IGD)
+        $hospital = null;
+        if ($agencyId) {
+            $hospital = Facility::where('type', 'HOSPITAL')->where('agency_id', $agencyId)->first();
+        }
+        if (!$hospital) {
+            $hospital = Facility::where('type', 'HOSPITAL')->first();
+        }
 
-        $incomingPatients = PatientHandover::with(['incident', 'assignment.unit'])
-            ->when($hospital, fn($q) => $q->where('facility_id', $hospital->id))
+        $hospitalId = $hospital?->id;
+
+        // Ambil seluruh pasien incoming yang belum diterima (received_at null)
+        $incomingPatients = PatientHandover::with(['incident', 'assignment.unit', 'assignment.agency', 'facility'])
             ->whereNull('received_at')
             ->orderBy('notified_at', 'desc')
             ->get();
 
-        $receivedHistory = PatientHandover::with(['incident', 'assignment.unit', 'receiver'])
-            ->when($hospital, fn($q) => $q->where('facility_id', $hospital->id))
+        $receivedHistory = PatientHandover::with(['incident', 'assignment.unit', 'assignment.agency', 'receiver', 'facility'])
             ->whereNotNull('received_at')
             ->orderBy('received_at', 'desc')
             ->limit(15)
             ->get();
 
         return view('hospital.index', compact('hospital', 'incomingPatients', 'receivedHistory'));
+    }
+
+    /**
+     * Endpoint API JSON untuk realtime polling status & pasien masuk IGD
+     */
+    public function getIncomingData(Request $request)
+    {
+        $user = auth()->user();
+        $agencyId = $user?->agency_id;
+
+        $hospital = null;
+        if ($agencyId) {
+            $hospital = Facility::where('type', 'HOSPITAL')->where('agency_id', $agencyId)->first();
+        }
+        if (!$hospital) {
+            $hospital = Facility::where('type', 'HOSPITAL')->first();
+        }
+
+        $hospitalId = $hospital?->id;
+
+        // Ambil seluruh pasien incoming yang belum diterima (received_at null)
+        $incomingPatients = PatientHandover::with(['incident', 'assignment.unit', 'assignment.agency', 'facility'])
+            ->whereNull('received_at')
+            ->orderBy('notified_at', 'desc')
+            ->get();
+
+        $receivedHistory = PatientHandover::with(['incident', 'assignment.unit', 'assignment.agency', 'receiver', 'facility'])
+            ->whereNotNull('received_at')
+            ->orderBy('received_at', 'desc')
+            ->limit(15)
+            ->get();
+
+        return response()->json([
+            'success'          => true,
+            'hospital'         => $hospital,
+            'incoming_count'   => $incomingPatients->count(),
+            'incoming'         => $incomingPatients,
+            'received_history' => $receivedHistory,
+        ]);
     }
 
     /**

@@ -74,6 +74,7 @@ Route::middleware(['auth.custom', 'auto.logout'])->group(function () {
 
     // Hospital Portal
     Route::get('/hospital-portal', [\App\Http\Controllers\Hospital\HospitalPortalController::class, 'index'])->name('hospital.index');
+    Route::get('/hospital-portal/data', [\App\Http\Controllers\Hospital\HospitalPortalController::class, 'getIncomingData'])->name('hospital.data');
     Route::post('/hospital-portal/received/{ulid}', [\App\Http\Controllers\Hospital\HospitalPortalController::class, 'markAsReceived'])->name('hospital.received');
     Route::post('/hospital-portal/capacity/{ulid}', [\App\Http\Controllers\Hospital\HospitalPortalController::class, 'updateCapacity'])->name('hospital.capacity.update');
 

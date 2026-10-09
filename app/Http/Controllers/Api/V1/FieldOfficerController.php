@@ -375,10 +375,16 @@ class FieldOfficerController extends Controller
             return response()->json(['success' => false, 'message' => 'Penugasan tidak ditemukan.'], 404);
         }
 
+        $facilityId = $request->input('facility_id');
+        if (!$facilityId || !\App\Models\Master\Facility::where('id', $facilityId)->exists()) {
+            $fallbackHosp = \App\Models\Master\Facility::where('type', 'HOSPITAL')->first();
+            $facilityId = $fallbackHosp ? $fallbackHosp->id : 1;
+        }
+
         $handover = PatientHandover::create([
             'incident_id'        => $assignment->incident_id,
             'assignment_id'      => $assignment->id,
-            'facility_id'        => $request->input('facility_id'),
+            'facility_id'        => $facilityId,
             'gender'             => $request->input('gender'),
             'age_estimate'       => $request->input('age_estimate'),
             'condition_text'     => $request->input('condition_text'), // Otomatis terenkripsi
@@ -387,6 +393,13 @@ class FieldOfficerController extends Controller
             'eta_seconds'        => $request->input('eta_seconds'),
             'notified_at'        => now(),
         ]);
+
+        // Broadcast realtime event ke Reverb WebSocket (Hospital Portal & Command Center)
+        try {
+            event(new \App\Events\PatientHandoverCreated($handover));
+        } catch (\Throwable $e) {
+            \Log::warning('Handover broadcast failed: ' . $e->getMessage());
+        }
 
         return response()->json([
             'success' => true,
