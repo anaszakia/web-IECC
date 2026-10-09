@@ -13,6 +13,17 @@
 @endpush
 
 @section('content')
+@php
+    $isOverriddenByOperator = $incident->severity_source === 'OPERATOR' || $incident->status === 'VERIFIED';
+    $aiSummary = strtolower($incident->aiAnalysis?->summary ?? '');
+    $aiMediaAnalysis = strtolower($incident->aiAnalysis?->media_analysis ?? '');
+    $isInvalidReport = !$isOverriddenByOperator && $incident->aiAnalysis && (
+        $incident->aiAnalysis->category === 'UNKNOWN' ||
+        $incident->aiAnalysis->confidence < 0.4 ||
+        str_contains($aiSummary, 'tidak valid') ||
+        str_contains($aiMediaAnalysis, 'tidak valid')
+    );
+@endphp
 <div class="row g-4">
     {{-- Header & Status Action Bar --}}
     <div class="col-12">
@@ -21,7 +32,18 @@
                 <div>
                     <div class="d-flex align-items-center gap-2 mb-1">
                         <h3 class="fw-bold mb-0">{{ $incident->incident_no }}</h3>
-                        <span class="badge bg-{{ $incident->status == 'NEW' ? 'danger' : ($incident->status == 'VERIFIED' ? 'warning' : ($incident->status == 'RESOLVED' ? 'success' : 'primary')) }} fs-6">
+                        @php
+                            $badgeBg = match($incident->status) {
+                                'NEW' => 'danger',
+                                'VERIFIED' => 'warning',
+                                'DISPATCHED', 'ACCEPTED', 'ARRIVED' => 'primary',
+                                'RESOLVED', 'CLOSED' => 'success',
+                                'FALSE_REPORT', 'REJECTED' => 'dark',
+                                'CANCELLED', 'DUPLICATE' => 'secondary',
+                                default => 'secondary'
+                            };
+                        @endphp
+                        <span class="badge bg-{{ $badgeBg }} fs-6">
                             {{ $incident->status_label }}
                         </span>
                         @if($incident->severity)
@@ -36,13 +58,13 @@
                 </div>
 
                 <div class="d-flex gap-2">
-                    @if($incident->status === 'NEW')
-                        <form action="{{ route('command-center.verify', $incident->ulid) }}" method="POST">
-                            @csrf
-                            <button type="submit" class="btn btn-warning">
-                                <i class="ti ti-check me-1"></i> Verifikasi Insiden
-                            </button>
-                        </form>
+                    @if(in_array($incident->status, ['NEW', 'VERIFIED']))
+                        <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#verifyModal">
+                            <i class="ti ti-check me-1"></i> {{ $incident->status === 'VERIFIED' ? 'Ubah / Koreksi Verifikasi' : 'Verifikasi Insiden' }}
+                        </button>
+                        <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#rejectModal">
+                            <i class="ti ti-ban me-1"></i> Tolak Laporan
+                        </button>
                     @endif
                     <a href="{{ route('command-center.index') }}" class="btn btn-outline-secondary">
                         <i class="ti ti-arrow-left me-1"></i> Kembali ke Dashboard
@@ -165,7 +187,25 @@
                         $incidentDetail = $incident->aiAnalysis->incident_detail ?: ($parsedAi['incident_detail'] ?? null);
                         $riskAnalysis = $incident->aiAnalysis->risk_analysis ?: ($parsedAi['risk_analysis'] ?? null);
                         $detectedLoc = $parsedAi['detected_location'] ?? null;
+                        
+                        // Jika operator sudah memverifikasi / meng-override kejadian, maka status tidak lagi dianggap invalid
+                        $isOverriddenByOperator = $incident->severity_source === 'OPERATOR' || $incident->status === 'VERIFIED';
+                        $isInvalidReport = !$isOverriddenByOperator && ($incident->aiAnalysis->category === 'UNKNOWN' || $incident->aiAnalysis->confidence < 0.4 || str_contains(strtolower($incident->aiAnalysis->summary ?? ''), 'tidak valid') || str_contains(strtolower($mediaAnalysis ?? ''), 'tidak valid'));
                     @endphp
+
+                    {{-- Indikasi Laporan Tidak Valid / Potensi Hoax dari AI --}}
+                    @if($isInvalidReport)
+                        <div class="alert alert-danger d-flex align-items-center mb-3 p-3 border-danger shadow-sm rounded-3">
+                            <i class="ti ti-alert-triangle fs-2 me-3 text-danger"></i>
+                            <div>
+                                <h6 class="fw-bold text-danger mb-1">Rekomendasi AI: Laporan Berpotensi Tidak Valid / Palsu</h6>
+                                <p class="small mb-0 text-dark">
+                                    AI mendeteksi bukti media atau informasi laporan tidak menunjukkan insiden darurat nyata. 
+                                    <b>Disarankan untuk Menolak Laporan</b> guna mencegah pengerahan armada yang tidak perlu.
+                                </p>
+                            </div>
+                        </div>
+                    @endif
 
                     {{-- 1. Ringkasan Eksekutif --}}
                     <div class="mb-3">
@@ -218,10 +258,10 @@
                     @endif
 
                     {{-- 5. Rekomendasi Armada Yang Wajib Dikerahkan --}}
-                    <div class="mb-3">
-                        <span class="text-muted small fw-semibold"><i class="ti ti-truck me-1"></i>REKOMENDASI ARMADA YANG WAJIB DIKERAHKAN:</span>
-                        <div class="d-flex gap-2 flex-wrap mt-1">
-                            @if(is_array($incident->aiAnalysis->required_units))
+                    @if(!$isInvalidReport && is_array($incident->aiAnalysis->required_units) && count($incident->aiAnalysis->required_units) > 0)
+                        <div class="mb-3">
+                            <span class="text-muted small fw-semibold"><i class="ti ti-truck me-1"></i>REKOMENDASI ARMADA YANG WAJIB DIKERAHKAN:</span>
+                            <div class="d-flex gap-2 flex-wrap mt-1">
                                 @foreach($incident->aiAnalysis->required_units as $unitType)
                                     @php
                                         $unitName = match($unitType) {
@@ -237,20 +277,27 @@
                                         <i class="ti ti-truck me-1"></i>{{ $unitName }}
                                     </span>
                                 @endforeach
-                            @endif
-                            @if($incident->aiAnalysis->critical_victim)
-                                <span class="badge bg-danger text-white px-2 py-1">
-                                    <i class="ti ti-alert-circle me-1"></i>Korban Kritis Terdeteksi
-                                </span>
-                            @endif
+                                @if($incident->aiAnalysis->critical_victim)
+                                    <span class="badge bg-danger text-white px-2 py-1">
+                                        <i class="ti ti-alert-circle me-1"></i>Korban Kritis Terdeteksi
+                                    </span>
+                                @endif
+                            </div>
                         </div>
-                    </div>
+                    @elseif($isInvalidReport)
+                        <div class="mb-3">
+                            <span class="text-muted small fw-semibold"><i class="ti ti-truck-off me-1 text-danger"></i>REKOMENDASI ARMADA:</span>
+                            <div class="p-2 bg-danger-subtle border border-danger-subtle rounded-2 mt-1 small text-danger fw-semibold">
+                                <i class="ti ti-ban me-1"></i> Tidak ada pengerahan armada yang disarankan (Laporan Tidak Valid).
+                            </div>
+                        </div>
+                    @endif
 
                     {{-- 6. Detail Waktu, Jarak Tempuh, & Metadata --}}
                     @php
                         $nearestRec = $incident->dispatchRecommendations->sortBy('rank_no')->first();
                     @endphp
-                    @if($nearestRec)
+                    @if(!$isInvalidReport && $nearestRec)
                         <div class="p-2 bg-primary-subtle border border-primary-subtle rounded-3 mb-3 d-flex justify-content-between align-items-center">
                             <div>
                                 <small class="text-primary fw-bold d-block"><i class="ti ti-navigation me-1"></i>ESTIMASI ARMADA TERDEKAT ({{ $nearestRec->unit?->code }}):</small>
@@ -279,10 +326,21 @@
         <div class="card card-lg shadow-sm border-0 mb-4">
             <div class="card-header bg-transparent border-bottom-0 pt-4 d-flex justify-content-between align-items-center">
                 <h5 class="fw-bold mb-0"><i class="ti ti-truck-delivery me-2 text-primary"></i>Rekomendasi Armada Terdekat</h5>
-                <span class="badge bg-primary-subtle text-primary">Sistem Penugasan Otomatis</span>
+                <span class="badge bg-{{ $isInvalidReport ? 'danger-subtle text-danger' : 'primary-subtle text-primary' }}">
+                    {{ $isInvalidReport ? 'Pengerahan Ditangguhkan' : 'Sistem Penugasan Otomatis' }}
+                </span>
             </div>
             <div class="card-body">
-                @if($incident->dispatchRecommendations->isNotEmpty())
+                @if($isInvalidReport)
+                    <div class="alert alert-danger mb-0 text-center py-4 rounded-3">
+                        <i class="ti ti-ban fs-1 text-danger d-block mb-2"></i>
+                        <h6 class="fw-bold text-danger mb-1">Rekomendasi Armada Otomatis Dinonaktifkan</h6>
+                        <p class="small text-muted mb-0">
+                            AI mengidentifikasi laporan ini sebagai laporan tidak valid / palsu. 
+                            Silakan lakukan verifikasi manual atau gunakan tombol <b>Tolak Laporan</b>.
+                        </p>
+                    </div>
+                @elseif($incident->dispatchRecommendations->isNotEmpty())
                     <div class="list-group list-group-flush mb-3">
                         @foreach($incident->dispatchRecommendations->sortBy('rank_no') as $rec)
                             <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-3 {{ $rec->chosen ? 'bg-success-subtle px-3 rounded-3' : '' }}">
@@ -301,7 +359,7 @@
                                         <span class="ms-2 text-primary fw-semibold">Skor Efisiensi: {{ $rec->score }}</span>
                                     </div>
                                 </div>
-                                @if(!$rec->chosen && !in_array($incident->status, ['CLOSED', 'RESOLVED']))
+                                @if(!$rec->chosen && !in_array($incident->status, ['CLOSED', 'RESOLVED', 'FALSE_REPORT', 'DUPLICATE', 'CANCELLED', 'REJECTED']))
                                     <form action="{{ route('command-center.dispatch', $incident->ulid) }}" method="POST">
                                         @csrf
                                         <input type="hidden" name="unit_id" value="{{ $rec->unit_id }}">
@@ -316,7 +374,7 @@
                 @else
                     <div class="text-center py-3 text-muted">
                         <p class="small mb-2">Belum ada skor rekomendasi unit terdekat.</p>
-                        @if($availableUnits->isNotEmpty() && !in_array($incident->status, ['CLOSED', 'RESOLVED']))
+                        @if($availableUnits->isNotEmpty() && !in_array($incident->status, ['CLOSED', 'RESOLVED', 'FALSE_REPORT', 'DUPLICATE', 'CANCELLED', 'REJECTED']))
                             <form action="{{ route('command-center.dispatch', $incident->ulid) }}" method="POST" class="d-flex gap-2">
                                 @csrf
                                 <select name="unit_id" class="form-select form-select-sm" required>
@@ -335,25 +393,35 @@
 
         {{-- Timeline Status Log --}}
         <div class="card card-lg shadow-sm border-0">
-            <div class="card-header bg-transparent border-bottom-0 pt-4">
+            <div class="card-header bg-transparent border-bottom-0 pt-4 d-flex justify-content-between align-items-center">
                 <h5 class="fw-bold mb-0"><i class="ti ti-history me-2 text-primary"></i>Riwayat & Jejak Audit Status</h5>
+                <span class="badge bg-success-subtle text-success small" id="live-indicator">
+                    <i class="ti ti-circle-filled text-success me-1 fs-xs"></i> Live
+                </span>
             </div>
             <div class="card-body">
-                <ul class="list-unstyled mb-0">
+                <ul class="list-unstyled mb-0" id="timeline-log-list">
                     @forelse($incident->statusLogs->sortByDesc('occurred_at') as $log)
                         @php
                             $statusTitle = match($log->to_status) {
-                                'NEW' => 'Laporan Diterima',
-                                'VERIFIED' => 'Insiden Terverifikasi',
-                                'DISPATCHED' => 'Armada Ditugaskan Menuju Lokasi',
-                                'ACCEPTED' => 'Petugas Menerima Tugas',
-                                'ARRIVED' => 'Petugas Tiba di TKP',
-                                'RESOLVED' => 'Penanganan Selesai',
-                                'CLOSED' => 'Insiden Ditutup',
-                                default => $log->to_status,
+                                'NEW'         => 'Laporan Diterima',
+                                'VERIFIED'    => 'Insiden Terverifikasi',
+                                'DISPATCHED'  => 'Armada Ditugaskan Menuju Lokasi',
+                                'ACCEPTED'    => 'Petugas Menerima Tugas',
+                                'EN_ROUTE'    => 'Petugas Menuju Lokasi (Dalam Perjalanan)',
+                                'ARRIVED'     => 'Petugas Tiba di Lokasi (TKP)',
+                                'HANDLING'    => 'Tindakan Penanganan di Lokasi',
+                                'TRANSFERRED' => 'Rujukan / Transfer ke Rumah Sakit',
+                                'RESOLVED'    => 'Penanganan Lapangan Selesai',
+                                'CLOSED'      => 'Insiden Ditutup Resmi',
+                                'FALSE_REPORT'=> 'Ditolak: Laporan Palsu / Hoax',
+                                'DUPLICATE'   => 'Dibatalkan: Laporan Duplikat',
+                                'CANCELLED'   => 'Laporan Dibatalkan',
+                                'REJECTED'    => 'Laporan Ditolak',
+                                default       => str_replace('_', ' ', $log->to_status),
                             };
                         @endphp
-                        <li class="d-flex gap-3 mb-3">
+                        <li class="d-flex gap-3 mb-3 timeline-item" data-log-id="{{ $log->id }}">
                             <div class="icon-shape icon-sm rounded-circle bg-primary-subtle text-primary mt-1">
                                 <i class="ti ti-circle-dot"></i>
                             </div>
@@ -368,6 +436,114 @@
                     @endforelse
                 </ul>
             </div>
+        </div>
+    </div>
+</div>
+
+{{-- Modal Verifikasi & Koreksi Kategori Operator (Human Override) --}}
+<div class="modal fade" id="verifyModal" tabindex="-1" aria-labelledby="verifyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('command-center.verify', $incident->ulid) }}" method="POST">
+                @csrf
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title fw-bold" id="verifyModalLabel">
+                        <i class="ti ti-shield-check me-2"></i>Verifikasi & Koreksi Data Insiden (Human Override)
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="text-muted small mb-3">
+                        Sebagai operator Command Center, Anda memegang keputusan final. Tentukan kategori kejadian dan tingkat keparahan yang sebenarnya. Sistem akan otomatis menghitung rekomendasi armada terdekat sesuai penetapan Anda.
+                    </p>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Kategori Kejadian Nyata <span class="text-danger">*</span></label>
+                        <select name="category" class="form-select" required>
+                            <option value="FIRE" {{ $incident->category === 'FIRE' ? 'selected' : '' }}>🔥 Kebakaran (FIRE) - Damkar & Ambulans</option>
+                            <option value="TRAFFIC" {{ $incident->category === 'TRAFFIC' ? 'selected' : '' }}>🚗 Kecelakaan Lalu Lintas (TRAFFIC) - Ambulans & Polisi</option>
+                            <option value="MEDICAL" {{ $incident->category === 'MEDICAL' ? 'selected' : '' }}>🚑 Darurat Medis (MEDICAL) - Ambulans</option>
+                            <option value="DISASTER" {{ $incident->category === 'DISASTER' ? 'selected' : '' }}>🌊 Bencana Alam (DISASTER) - Tim SAR & Ambulans</option>
+                            <option value="SECURITY" {{ $incident->category === 'SECURITY' ? 'selected' : '' }}>🛡️ Kamtibmas / Kriminal (SECURITY) - Polisi</option>
+                            <option value="UNKNOWN" {{ $incident->category === 'UNKNOWN' ? 'selected' : '' }}>❓ Belum Diketahui / Lainnya</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tingkat Keparahan (Severity) <span class="text-danger">*</span></label>
+                        <select name="severity" class="form-select" required>
+                            <option value="1" {{ $incident->severity == 1 ? 'selected' : '' }}>Level 1 - Ringan / Non-Kritis</option>
+                            <option value="2" {{ $incident->severity == 2 ? 'selected' : '' }}>Level 2 - Sedang (Butuh Bantuan)</option>
+                            <option value="3" {{ ($incident->severity == 3 || !$incident->severity) ? 'selected' : '' }}>Level 3 - Berat / Kedaruratan Tinggi</option>
+                            <option value="4" {{ $incident->severity == 4 ? 'selected' : '' }}>Level 4 - Kritis / Mengancam Jiwa</option>
+                            <option value="5" {{ $incident->severity == 5 ? 'selected' : '' }}>Level 5 - Bencana / Korban Massal</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Catatan Verifikasi Operator (Opsional)</label>
+                        <textarea name="note" rows="2" class="form-control" placeholder="Contoh: Laporan dikonfirmasi valid via telepon warga / pemantauan CCTV."></textarea>
+                    </div>
+
+                    <div class="alert alert-info small mb-0 d-flex align-items-center">
+                        <i class="ti ti-info-circle fs-4 me-2 text-info"></i>
+                        <span>Setelah diverifikasi, sistem akan langsung mengaktifkan rekomendasi armada terdekat sesuai kategori yang dipilih.</span>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-warning fw-bold">
+                        <i class="ti ti-check me-1"></i> Simpan & Verifikasi Insiden
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- Modal Konfirmasi Tolak / Batalkan Laporan --}}
+<div class="modal fade" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('command-center.reject', $incident->ulid) }}" method="POST">
+                @csrf
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title fw-bold text-white" id="rejectModalLabel">
+                        <i class="ti ti-ban me-2"></i>Tolak / Batalkan Laporan Insiden
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="text-muted small mb-3">
+                        Pilih kategori penolakan dan berikan catatan alasan untuk keperluan riwayat jejak audit (audit log).
+                    </p>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Alasan Penolakan <span class="text-danger">*</span></label>
+                        <select name="reason_type" class="form-select" required>
+                            <option value="FALSE_REPORT" selected>Laporan Palsu / Hoax / Foto Tidak Relevan</option>
+                            <option value="DUPLICATE">Laporan Duplikat (Sudah Dilaporkan Sebelumnya)</option>
+                            <option value="CANCELLED">Dibatalkan (Permintaan Pelapor / Tidak Ditemukan Kejadian)</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Catatan Tambahan Operator (Opsional)</label>
+                        <textarea name="reason_note" rows="3" class="form-control" placeholder="Contoh: Bukti foto merupakan tangkapan layar berita lama / tidak ada insiden aktual di lokasi."></textarea>
+                    </div>
+
+                    <div class="alert alert-warning small mb-0 d-flex align-items-center">
+                        <i class="ti ti-alert-triangle fs-4 me-2"></i>
+                        <span>Insiden ini akan ditutup & tidak akan ada armada yang ditugaskan ke lokasi.</span>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kembali</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="ti ti-ban me-1"></i> Konfirmasi Tolak Laporan
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -399,6 +575,51 @@
                 window.location.reload();
             }, 4000);
         @endif
+
+        // Realtime Polling Timeline & Status Log Setiap 3 Detik
+        const dataUrl = "{{ route('command-center.detail-data', $incident->ulid) }}";
+        let lastLogsCount = {{ $incident->statusLogs->count() }};
+
+        function fetchLiveStatus() {
+            fetch(dataUrl, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) return;
+
+                // 1. Update Timeline Log jika ada data baru
+                if (data.logs && data.logs.length !== lastLogsCount) {
+                    lastLogsCount = data.logs.length;
+                    const container = document.getElementById('timeline-log-list');
+                    if (container) {
+                        let html = '';
+                        data.logs.forEach(log => {
+                            html += `
+                                <li class="d-flex gap-3 mb-3 timeline-item animate__animated animate__fadeIn" data-log-id="${log.id}">
+                                    <div class="icon-shape icon-sm rounded-circle bg-primary-subtle text-primary mt-1">
+                                        <i class="ti ti-circle-dot"></i>
+                                    </div>
+                                    <div>
+                                        <span class="fw-bold text-dark">${log.status_title}</span>
+                                        <p class="text-muted small mb-0">${log.note || '-'}</p>
+                                        <small class="text-secondary">${log.time}</small>
+                                    </div>
+                                </li>
+                            `;
+                        });
+                        container.innerHTML = html;
+                    }
+                }
+            })
+            .catch(err => console.debug('Polling detail error:', err));
+        }
+
+        // Jalankan polling setiap 3 detik
+        setInterval(fetchLiveStatus, 3000);
     });
 </script>
 @endpush

@@ -21,21 +21,40 @@ class DispatchEngine
         $weights = config('dispatch.weights');
         $avgSpeedKmh = config('dispatch.average_speed_kmh', 30);
 
+        // Jika kategori UNKNOWN atau required_units eksplisit kosong (laporan belum diverifikasi dan AI menandai UNKNOWN), jangan generate armada
+        $isOperatorVerified = $incident->severity_source === 'OPERATOR' || $incident->status === 'VERIFIED';
+
+        if (!$isOperatorVerified && ($incident->category === 'UNKNOWN' || ($incident->aiAnalysis && empty($incident->aiAnalysis->required_units) && $incident->aiAnalysis->category === 'UNKNOWN'))) {
+            DispatchRecommendation::where('incident_id', $incident->id)->delete();
+            return [];
+        }
+
         $defaultUnits = match(strtoupper($incident->category ?? '')) {
             'FIRE'     => ['fire_truck', 'ambulance'],
             'TRAFFIC'  => ['ambulance', 'police_patrol'],
             'SECURITY' => ['police_patrol'],
             'DISASTER' => ['rescue_team', 'ambulance'],
+            'MEDICAL'  => ['ambulance'],
             default    => ['ambulance'],
         };
 
-        // Jika ada indikasi kata kunci spesifik di deskripsi
-        $desc = strtolower($incident->description ?? '');
-        if (str_contains($desc, 'kebakaran') || str_contains($desc, 'api') || str_contains($desc, 'damkar')) {
-            $defaultUnits = ['fire_truck', 'ambulance'];
+        // Jika diverifikasi oleh operator, prioritaskan armada sesuai kategori pilihan operator
+        if ($isOperatorVerified && $incident->category !== 'UNKNOWN') {
+            $requiredUnits = $defaultUnits;
+        } else {
+            // Jika ada indikasi kata kunci spesifik di deskripsi
+            $desc = strtolower($incident->description ?? '');
+            if (str_contains($desc, 'kebakaran') || str_contains($desc, 'api') || str_contains($desc, 'damkar')) {
+                $defaultUnits = ['fire_truck', 'ambulance'];
+            }
+
+            $requiredUnits = $incident->aiAnalysis?->required_units ?? $defaultUnits;
         }
 
-        $requiredUnits = $incident->aiAnalysis?->required_units ?? $defaultUnits;
+        if (empty($requiredUnits)) {
+            DispatchRecommendation::where('incident_id', $incident->id)->delete();
+            return [];
+        }
         
         // Pemetaan nama tipe unit
         $typeMapping = [

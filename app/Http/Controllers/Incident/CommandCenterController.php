@@ -88,6 +88,79 @@ class CommandCenterController extends Controller
     }
 
     /**
+     * API JSON Live Data untuk Detail Insiden (Timeline & Status Realtime)
+     */
+    public function getDetailData(string $ulid): JsonResponse
+    {
+        $incident = Incident::with([
+            'statusLogs.actor',
+            'assignments.unit',
+            'assignments.agency',
+            'dispatchRecommendations.unit',
+        ])
+        ->whereUlid($ulid)
+        ->firstOrFail();
+
+        $logs = $incident->statusLogs->sortByDesc('occurred_at')->values()->map(function ($log) {
+            $statusTitle = match($log->to_status) {
+                'NEW'         => 'Laporan Diterima',
+                'VERIFIED'    => 'Insiden Terverifikasi',
+                'DISPATCHED'  => 'Armada Ditugaskan Menuju Lokasi',
+                'ACCEPTED'    => 'Petugas Menerima Tugas',
+                'EN_ROUTE'    => 'Petugas Menuju Lokasi (Dalam Perjalanan)',
+                'ARRIVED'     => 'Petugas Tiba di Lokasi (TKP)',
+                'HANDLING'    => 'Tindakan Penanganan di Lokasi',
+                'TRANSFERRED' => 'Rujukan / Transfer ke Rumah Sakit',
+                'RESOLVED'    => 'Penanganan Lapangan Selesai',
+                'CLOSED'      => 'Insiden Ditutup Resmi',
+                'FALSE_REPORT'=> 'Ditolak: Laporan Palsu / Hoax',
+                'DUPLICATE'   => 'Dibatalkan: Laporan Duplikat',
+                'CANCELLED'   => 'Laporan Dibatalkan',
+                'REJECTED'    => 'Laporan Ditolak',
+                default       => str_replace('_', ' ', $log->to_status),
+            };
+
+            return [
+                'id'          => $log->id,
+                'status'      => $log->to_status,
+                'status_title'=> $statusTitle,
+                'note'        => $log->note,
+                'time'        => $log->occurred_at?->format('H:i:s, d M Y'),
+                'time_human'  => $log->occurred_at?->diffForHumans(),
+            ];
+        });
+
+        $assignments = $incident->assignments->map(function ($asg) {
+            return [
+                'id'        => $asg->id,
+                'unit_code' => $asg->unit?->code,
+                'unit_type' => $asg->unit?->type,
+                'status'    => $asg->status,
+                'status_label' => match($asg->status) {
+                    'DISPATCHED'  => 'Ditugaskan',
+                    'ACCEPTED'    => 'Diterima',
+                    'EN_ROUTE'    => 'Dalam Perjalanan',
+                    'ARRIVED'     => 'Tiba di Lokasi',
+                    'HANDLING'    => 'Penanganan',
+                    'TRANSFERRED' => 'Rujukan RS',
+                    'RESOLVED'    => 'Selesai',
+                    default       => $asg->status,
+                },
+                'lat'       => $asg->unit?->lat,
+                'lng'       => $asg->unit?->lng,
+            ];
+        });
+
+        return response()->json([
+            'success'     => true,
+            'status'      => $incident->status,
+            'status_label'=> $incident->status_label,
+            'logs'        => $logs,
+            'assignments' => $assignments,
+        ]);
+    }
+
+    /**
      * API JSON Data Insiden Aktif untuk Pembaruan Peta & Polling/Echo
      */
     public function getActiveData(): JsonResponse
@@ -115,30 +188,77 @@ class CommandCenterController extends Controller
     }
 
     /**
-     * Aksi Verifikasi Insiden
+     * Aksi Verifikasi Insiden (Human Override / Konfirmasi Operator)
      */
-     public function verify(Request $request, string $ulid)
+     public function verify(Request $request, string $ulid, \App\Services\Dispatch\DispatchEngine $dispatchEngine)
     {
+        $request->validate([
+            'category' => 'required|in:MEDICAL,FIRE,DISASTER,SECURITY,TRAFFIC,UNKNOWN',
+            'severity' => 'required|integer|min:1|max:5',
+            'note'     => 'nullable|string|max:500',
+        ]);
+
         $incident = Incident::whereUlid($ulid)->firstOrFail();
-        
+        $oldCategory = $incident->category;
+        $newCategory = $request->input('category');
+        $newSeverity = (int) $request->input('severity', $incident->severity ?: 3);
+        $note = $request->input('note') ?: "Insiden diverifikasi & ditetapkan sebagai {$newCategory} (Tingkat {$newSeverity}) oleh operator.";
+
         $incident->update([
-            'status'      => 'VERIFIED',
-            'verified_at' => now(),
-            'severity'    => $request->input('severity', $incident->severity),
-            'category'    => $request->input('category', $incident->category),
+            'status'          => 'VERIFIED',
+            'verified_at'     => now(),
+            'severity'        => $newSeverity,
+            'category'        => $newCategory,
             'severity_source' => 'OPERATOR',
         ]);
 
+        // Catat Audit Status Log
         $incident->statusLogs()->create([
-            'from_status' => 'NEW',
+            'from_status' => $incident->getOriginal('status') ?? 'NEW',
             'to_status'   => 'VERIFIED',
             'actor_id'    => auth()->id(),
             'actor_type'  => 'USER',
-            'note'        => 'Insiden diverifikasi oleh operator.',
+            'note'        => $note,
             'occurred_at' => now(),
         ]);
 
-        return redirect()->back()->with('success', 'Insiden berhasil diverifikasi.');
+        // Hitung ulang rekomendasi armada secara otomatis berdasarkan kategori yang ditetapkan operator
+        $dispatchEngine->generateRecommendations($incident->fresh());
+
+        return redirect()->back()->with('success', 'Insiden berhasil diverifikasi. Rekomendasi armada telah diperbarui sesuai penetapan operator.');
+    }
+
+    /**
+     * Aksi Tolak / Batalkan Laporan (Invalid / False Report / Spam)
+     */
+    public function reject(Request $request, string $ulid)
+    {
+        $request->validate([
+            'reason_type' => 'required|in:FALSE_REPORT,DUPLICATE,CANCELLED',
+            'reason_note' => 'nullable|string|max:500',
+        ]);
+
+        $incident = Incident::whereUlid($ulid)->firstOrFail();
+        $targetStatus = $request->input('reason_type', 'FALSE_REPORT');
+        $note = $request->input('reason_note') ?: 'Laporan ditolak oleh operator karena tidak valid / tidak ada kedaruratan aktual.';
+
+        $oldStatus = $incident->status;
+
+        $incident->update([
+            'status'    => $targetStatus,
+            'closed_at' => now(),
+        ]);
+
+        $incident->statusLogs()->create([
+            'from_status' => $oldStatus,
+            'to_status'   => $targetStatus,
+            'actor_id'    => auth()->id(),
+            'actor_type'  => 'USER',
+            'note'        => "[{$targetStatus}] " . $note,
+            'occurred_at' => now(),
+        ]);
+
+        return redirect()->route('command-center.index')->with('success', 'Laporan berhasil ditolak dan diarsipkan sebagai ' . ($targetStatus === 'FALSE_REPORT' ? 'Laporan Palsu/Tidak Valid' : $targetStatus) . '.');
     }
 
     /**

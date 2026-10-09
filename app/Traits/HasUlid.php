@@ -43,6 +43,16 @@ trait HasUlid
     }
 
     /**
+     * Retrieve the model for a bound value (supports both ULID and ID fallback).
+     */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return $this->where($field ?? 'ulid', $value)
+            ->orWhere('id', $value)
+            ->first();
+    }
+
+    /**
      * Find a model by ULID or fail.
      */
     public static function findByUlidOrFail(string $ulid): static

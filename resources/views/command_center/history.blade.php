@@ -93,6 +93,8 @@
                     <option value="DISPATCHED" {{ request('status') === 'DISPATCHED' ? 'selected' : '' }}>Armada Bergerak (DISPATCHED)</option>
                     <option value="RESOLVED" {{ request('status') === 'RESOLVED' ? 'selected' : '' }}>Selesai di TKP (RESOLVED)</option>
                     <option value="CLOSED" {{ request('status') === 'CLOSED' ? 'selected' : '' }}>Ditutup Resmi (CLOSED)</option>
+                    <option value="FALSE_REPORT" {{ request('status') === 'FALSE_REPORT' ? 'selected' : '' }}>Laporan Palsu / Hoax (FALSE_REPORT)</option>
+                    <option value="DUPLICATE" {{ request('status') === 'DUPLICATE' ? 'selected' : '' }}>Duplikat (DUPLICATE)</option>
                     <option value="CANCELLED" {{ request('status') === 'CANCELLED' ? 'selected' : '' }}>Dibatalkan (CANCELLED)</option>
                 </select>
             </div>
@@ -152,9 +154,11 @@
                             $statusBg = match($inc->status) {
                                 'NEW' => 'danger',
                                 'VERIFIED' => 'warning',
-                                'DISPATCHED' => 'primary',
+                                'DISPATCHED', 'ACCEPTED', 'ARRIVED' => 'primary',
                                 'RESOLVED' => 'success',
                                 'CLOSED' => 'secondary',
+                                'FALSE_REPORT', 'REJECTED' => 'dark',
+                                'CANCELLED', 'DUPLICATE' => 'secondary',
                                 default => 'light text-dark',
                             };
                         @endphp

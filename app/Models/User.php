@@ -13,6 +13,14 @@ class User extends Authenticatable implements PasskeyUser
 {
     use PasskeyAuthenticatable, HasUlid;
 
+    /**
+     * Pastikan parameter route key selalu menghasilkan nilai (ulid atau fallback ke id)
+     */
+    public function getRouteKey()
+    {
+        return $this->ulid ?: $this->getKey();
+    }
+
     protected $fillable = [
         'ulid',
         'name',
@@ -129,7 +137,7 @@ class User extends Authenticatable implements PasskeyUser
      */
     public static function getPaginatedUsers(?string $search = null, int $perPage = 10)
     {
-        $query = static::select('users.id', 'users.name', 'users.email', 'users.phone', 'users.avatar', 'users.role_id', 'users.created_at')
+        $query = static::select('users.id', 'users.ulid', 'users.name', 'users.email', 'users.phone', 'users.avatar', 'users.role_id', 'users.created_at')
             ->with(['role:id,name,slug', 'roles:id,name,slug']);
 
         if (!empty($search)) {

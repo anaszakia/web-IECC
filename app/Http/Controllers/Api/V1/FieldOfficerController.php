@@ -221,6 +221,15 @@ class FieldOfficerController extends Controller
             $assignment->update($updateData);
             $assignment->incident->update($incidentData);
 
+            $defaultNote = match($newStatus) {
+                'EN_ROUTE'    => "Petugas bergerak menuju TKP (Dalam Perjalanan)",
+                'ARRIVED'     => "Petugas tiba di lokasi kejadian (TKP)",
+                'HANDLING'    => "Petugas sedang melakukan tindakan penanganan di TKP",
+                'TRANSFERRED' => "Korban/Pasien sedang dalam rujukan/transfer ke Rumah Sakit",
+                'RESOLVED'    => "Penanganan darurat di lapangan selesai",
+                default       => "Status penugasan diperbarui ke {$newStatus}",
+            };
+
             // Catat log
             IncidentStatusLog::create([
                 'incident_id'   => $assignment->incident_id,
@@ -229,7 +238,7 @@ class FieldOfficerController extends Controller
                 'to_status'     => $newStatus,
                 'lat'           => $request->input('lat'),
                 'lng'           => $request->input('lng'),
-                'note'          => $request->input('note', "Status diperbarui ke {$newStatus}"),
+                'note'          => $request->input('note') ?: $defaultNote,
                 'occurred_at'   => $now,
                 'synced_at'     => $now,
             ]);

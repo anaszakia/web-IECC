@@ -67,7 +67,9 @@ Route::middleware(['auth.custom', 'auto.logout'])->group(function () {
     Route::get('/command-center/data', [CommandCenterController::class, 'getActiveData'])->name('command-center.data');
     Route::get('/incidents/history', [\App\Http\Controllers\Incident\IncidentHistoryController::class, 'index'])->name('incidents.history');
     Route::get('/command-center/{ulid}', [CommandCenterController::class, 'show'])->name('command-center.show');
+    Route::get('/command-center/{ulid}/data', [CommandCenterController::class, 'getDetailData'])->name('command-center.detail-data');
     Route::post('/command-center/{ulid}/verify', [CommandCenterController::class, 'verify'])->name('command-center.verify');
+    Route::post('/command-center/{ulid}/reject', [CommandCenterController::class, 'reject'])->name('command-center.reject');
     Route::post('/command-center/{ulid}/dispatch', [CommandCenterController::class, 'dispatchUnit'])->name('command-center.dispatch');
 
     // Hospital Portal
