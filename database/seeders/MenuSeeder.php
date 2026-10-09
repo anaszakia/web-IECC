@@ -90,6 +90,13 @@ class MenuSeeder extends Seeder
                 'parent_id' => $menuManagement->id,
                 'order'     => 5,
             ],
+            [
+                'name'      => 'Master Fasilitas',
+                'url'       => '/facilities',
+                'icon'      => 'ti ti-building-hospital',
+                'parent_id' => $menuManagement->id,
+                'order'     => 6,
+            ],
         ];
 
         $menus = collect([$dashboard, $commandCenter, $incidentHistory, $hospitalPortal, $executiveDashboard, $menuManagement]);

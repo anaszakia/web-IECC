@@ -20,6 +20,24 @@ use Illuminate\Support\Facades\Validator;
 class FieldOfficerController extends Controller
 {
     /**
+     * GET /api/v1/field/facilities
+     * Ambil daftar Rumah Sakit & Puskesmas rujukan IGD
+     */
+    public function getFacilities(Request $request): JsonResponse
+    {
+        $facilities = Facility::whereIn('type', ['HOSPITAL', 'PUSKESMAS'])
+            ->where('is_active', true)
+            ->orderByRaw("FIELD(type, 'HOSPITAL', 'PUSKESMAS')")
+            ->orderBy('name')
+            ->get(['id', 'ulid', 'name', 'type', 'address', 'phone', 'er_beds_total', 'er_beds_available', 'er_status', 'services', 'lat', 'lng']);
+
+        return response()->json([
+            'success' => true,
+            'data'    => $facilities,
+        ]);
+    }
+
+    /**
      * GET /api/v1/field/tasks
      * Ambil daftar penugasan aktif untuk armada/petugas
      */

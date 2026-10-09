@@ -16,32 +16,50 @@ class HospitalPortalController extends Controller
     public function index(Request $request): View
     {
         $user = auth()->user();
+        $userFacilityId = $user?->facility_id;
         $agencyId = $user?->agency_id;
+        $isSuperAdmin = $user?->hasRole('superadmin') || $user?->hasRole('operator');
 
-        // Ambil RS untuk informasi header (kapasitas bed, status IGD)
+        $allFacilities = Facility::whereIn('type', ['HOSPITAL', 'PUSKESMAS'])->where('is_active', true)->orderBy('name')->get();
+
+        // Tentukan fasilitas yang sedang dibuka
+        $selectedFacilityId = $request->query('facility_id');
         $hospital = null;
-        if ($agencyId) {
-            $hospital = Facility::where('type', 'HOSPITAL')->where('agency_id', $agencyId)->first();
+
+        if ($userFacilityId && !$isSuperAdmin) {
+            // Jika user adalah staf RS/Puskesmas tertentu, kunci hanya ke fasilitasnya
+            $hospital = Facility::find($userFacilityId);
+        } elseif ($selectedFacilityId) {
+            // Jika admin memilih fasilitas dari dropdown switcher
+            $hospital = Facility::find($selectedFacilityId);
+        } elseif ($userFacilityId) {
+            $hospital = Facility::find($userFacilityId);
+        } elseif ($agencyId) {
+            $hospital = Facility::whereIn('type', ['HOSPITAL', 'PUSKESMAS'])->where('agency_id', $agencyId)->first();
         }
+
         if (!$hospital) {
-            $hospital = Facility::where('type', 'HOSPITAL')->first();
+            $hospital = Facility::whereIn('type', ['HOSPITAL', 'PUSKESMAS'])->first();
         }
 
         $hospitalId = $hospital?->id;
 
-        // Ambil seluruh pasien incoming yang belum diterima (received_at null)
-        $incomingPatients = PatientHandover::with(['incident', 'assignment.unit', 'assignment.agency', 'facility'])
-            ->whereNull('received_at')
-            ->orderBy('notified_at', 'desc')
-            ->get();
+        // Query Incoming Patients: Filter ketat berdasarkan fasilitas rujukan yang dituju
+        $incomingQuery = PatientHandover::with(['incident', 'assignment.unit', 'assignment.agency', 'facility'])
+            ->whereNull('received_at');
 
-        $receivedHistory = PatientHandover::with(['incident', 'assignment.unit', 'assignment.agency', 'receiver', 'facility'])
-            ->whereNotNull('received_at')
-            ->orderBy('received_at', 'desc')
-            ->limit(15)
-            ->get();
+        $historyQuery = PatientHandover::with(['incident', 'assignment.unit', 'assignment.agency', 'receiver', 'facility'])
+            ->whereNotNull('received_at');
 
-        return view('hospital.index', compact('hospital', 'incomingPatients', 'receivedHistory'));
+        if ($hospitalId) {
+            $incomingQuery->where('facility_id', $hospitalId);
+            $historyQuery->where('facility_id', $hospitalId);
+        }
+
+        $incomingPatients = $incomingQuery->orderBy('notified_at', 'desc')->get();
+        $receivedHistory = $historyQuery->orderBy('received_at', 'desc')->limit(15)->get();
+
+        return view('hospital.index', compact('hospital', 'incomingPatients', 'receivedHistory', 'allFacilities', 'isSuperAdmin'));
     }
 
     /**
@@ -50,29 +68,42 @@ class HospitalPortalController extends Controller
     public function getIncomingData(Request $request)
     {
         $user = auth()->user();
+        $userFacilityId = $user?->facility_id;
         $agencyId = $user?->agency_id;
+        $isSuperAdmin = $user?->hasRole('superadmin') || $user?->hasRole('operator');
 
+        $selectedFacilityId = $request->query('facility_id');
         $hospital = null;
-        if ($agencyId) {
-            $hospital = Facility::where('type', 'HOSPITAL')->where('agency_id', $agencyId)->first();
+
+        if ($userFacilityId && !$isSuperAdmin) {
+            $hospital = Facility::find($userFacilityId);
+        } elseif ($selectedFacilityId) {
+            $hospital = Facility::find($selectedFacilityId);
+        } elseif ($userFacilityId) {
+            $hospital = Facility::find($userFacilityId);
+        } elseif ($agencyId) {
+            $hospital = Facility::whereIn('type', ['HOSPITAL', 'PUSKESMAS'])->where('agency_id', $agencyId)->first();
         }
+
         if (!$hospital) {
-            $hospital = Facility::where('type', 'HOSPITAL')->first();
+            $hospital = Facility::whereIn('type', ['HOSPITAL', 'PUSKESMAS'])->first();
         }
 
         $hospitalId = $hospital?->id;
 
-        // Ambil seluruh pasien incoming yang belum diterima (received_at null)
-        $incomingPatients = PatientHandover::with(['incident', 'assignment.unit', 'assignment.agency', 'facility'])
-            ->whereNull('received_at')
-            ->orderBy('notified_at', 'desc')
-            ->get();
+        $incomingQuery = PatientHandover::with(['incident', 'assignment.unit', 'assignment.agency', 'facility'])
+            ->whereNull('received_at');
 
-        $receivedHistory = PatientHandover::with(['incident', 'assignment.unit', 'assignment.agency', 'receiver', 'facility'])
-            ->whereNotNull('received_at')
-            ->orderBy('received_at', 'desc')
-            ->limit(15)
-            ->get();
+        $historyQuery = PatientHandover::with(['incident', 'assignment.unit', 'assignment.agency', 'receiver', 'facility'])
+            ->whereNotNull('received_at');
+
+        if ($hospitalId) {
+            $incomingQuery->where('facility_id', $hospitalId);
+            $historyQuery->where('facility_id', $hospitalId);
+        }
+
+        $incomingPatients = $incomingQuery->orderBy('notified_at', 'desc')->get();
+        $receivedHistory = $historyQuery->orderBy('received_at', 'desc')->limit(15)->get();
 
         return response()->json([
             'success'          => true,

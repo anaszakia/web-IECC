@@ -106,6 +106,32 @@ class IeccMasterSeeder extends Seeder
                 'er_status'         => 'NORMAL',
             ],
             [
+                'agency_id'         => $agencies['RS-UD']->id,
+                'type'              => 'HOSPITAL',
+                'name'              => 'RSUD Wilayah Barat',
+                'address'           => 'Jl. Daan Mogot No. 45',
+                'phone'             => '021-500119',
+                'lat'               => -6.1682300,
+                'lng'               => 106.8021400,
+                'services'          => ['emergency_room', 'trauma', 'orthopedic'],
+                'er_beds_total'     => 20,
+                'er_beds_available' => 8,
+                'er_status'         => 'NORMAL',
+            ],
+            [
+                'agency_id'         => $agencies['RS-UD']->id,
+                'type'              => 'HOSPITAL',
+                'name'              => 'RS Medika Sejahtera',
+                'address'           => 'Jl. Thamrin No. 88',
+                'phone'             => '021-500120',
+                'lat'               => -6.1824100,
+                'lng'               => 106.8231200,
+                'services'          => ['emergency_room', 'cardiac', 'icu'],
+                'er_beds_total'     => 25,
+                'er_beds_available' => 5,
+                'er_status'         => 'BUSY',
+            ],
+            [
                 'agency_id'         => $agencies['DINKES']->id,
                 'type'              => 'PUSKESMAS',
                 'name'              => 'Puskesmas Kecamatan Gambir',
@@ -116,6 +142,19 @@ class IeccMasterSeeder extends Seeder
                 'services'          => ['emergency_room', 'maternal'],
                 'er_beds_total'     => 10,
                 'er_beds_available' => 6,
+                'er_status'         => 'NORMAL',
+            ],
+            [
+                'agency_id'         => $agencies['DINKES']->id,
+                'type'              => 'PUSKESMAS',
+                'name'              => 'Puskesmas Kelurahan Petojo',
+                'address'           => 'Jl. Suryopranoto No. 12',
+                'phone'             => '021-3845566',
+                'lat'               => -6.1698200,
+                'lng'               => 106.8189000,
+                'services'          => ['emergency_room'],
+                'er_beds_total'     => 6,
+                'er_beds_available' => 4,
                 'er_status'         => 'NORMAL',
             ],
             [
@@ -279,12 +318,22 @@ class IeccMasterSeeder extends Seeder
                 'user_type' => 'STAFF',
             ],
             [
-                'name'      => 'Petugas IGD RSUD',
-                'email'     => 'hospital.rsud@iecc.local',
-                'password'  => Hash::make('12345678'),
-                'role_slug' => 'hospital-staff',
-                'agency_id' => $agencies['RS-UD']->id,
-                'user_type' => 'STAFF',
+                'name'        => 'Petugas IGD RSUD Tarakan',
+                'email'       => 'hospital.rsud@iecc.local',
+                'password'    => Hash::make('12345678'),
+                'role_slug'   => 'hospital-staff',
+                'agency_id'   => $agencies['RS-UD']->id,
+                'facility_id' => $facilities['RSUD Tarakan']->id ?? null,
+                'user_type'   => 'STAFF',
+            ],
+            [
+                'name'        => 'Petugas Puskesmas Gambir',
+                'email'       => 'puskesmas.gambir@iecc.local',
+                'password'    => Hash::make('12345678'),
+                'role_slug'   => 'hospital-staff',
+                'agency_id'   => $agencies['DINKES']->id,
+                'facility_id' => $facilities['Puskesmas Kecamatan Gambir']->id ?? null,
+                'user_type'   => 'STAFF',
             ],
             [
                 'name'      => 'Walikota / Pimpinan',
@@ -313,7 +362,7 @@ class IeccMasterSeeder extends Seeder
             unset($ud['role_slug'], $ud['unit_code'], $ud['unit_role']);
 
             $role = $roles[$roleSlug] ?? null;
-            $user = User::firstOrCreate(
+            $user = User::updateOrCreate(
                 ['email' => $ud['email']],
                 array_merge($ud, ['role_id' => $role?->id])
             );

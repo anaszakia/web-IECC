@@ -95,6 +95,9 @@ Route::middleware(['auth.custom', 'auto.logout'])->group(function () {
     Route::post('/units/{unit}/members', [\App\Http\Controllers\Admin\UnitController::class, 'addMember'])->name('units.members.store');
     Route::put('/units/{unit}/members/{member}', [\App\Http\Controllers\Admin\UnitController::class, 'updateMember'])->name('units.members.update');
     Route::delete('/units/{unit}/members/{member}', [\App\Http\Controllers\Admin\UnitController::class, 'removeMember'])->name('units.members.destroy');
+
+    // Modul Master Fasilitas (Faskes, Pos Damkar, Polsek)
+    Route::resource('/facilities', \App\Http\Controllers\Admin\FacilityController::class);
 });
 
 // Audio Siren Streamer (Public, Content-Type: audio/wav & inline)

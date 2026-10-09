@@ -31,6 +31,7 @@ class User extends Authenticatable implements PasskeyUser
         'address',
         'role_id',
         'agency_id',
+        'facility_id',
         'user_type',
         'is_active',
         'google_id',
@@ -46,6 +47,12 @@ class User extends Authenticatable implements PasskeyUser
     public function agency()
     {
         return $this->belongsTo(Agency::class);
+    }
+
+    // Fasilitas / Faskes Tempat Bertugas
+    public function facility()
+    {
+        return $this->belongsTo(\App\Models\Master\Facility::class);
     }
 
     // Primary role (one-to-many via role_id column)

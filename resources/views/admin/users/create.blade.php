@@ -103,6 +103,34 @@
                             </div>
                         </div>
 
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label class="form-label">Instansi (Agency)</label>
+                                <select name="agency_id" class="form-select">
+                                    <option value="">-- Tanpa Instansi Khusus --</option>
+                                    @foreach ($agencies as $agency)
+                                        <option value="{{ $agency->id }}"
+                                            {{ old('agency_id') == $agency->id ? 'selected' : '' }}>
+                                            {{ $agency->name }} ({{ $agency->code }})
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Fasilitas / Faskes Tempat Bertugas</label>
+                                <select name="facility_id" class="form-select">
+                                    <option value="">-- Tanpa Fasilitas Khusus (Akses Global / Kantor) --</option>
+                                    @foreach ($facilities as $facility)
+                                        <option value="{{ $facility->id }}"
+                                            {{ old('facility_id') == $facility->id ? 'selected' : '' }}>
+                                            {{ $facility->name }} ({{ $facility->type }})
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <small class="text-muted">Jika diisi RSUD/Puskesmas, Portal IGD hanya menampilkan rujukan ke faskes ini.</small>
+                            </div>
+                        </div>
+
                         <div class="mb-4">
                             <label class="form-label">Alamat</label>
                             <textarea name="address" rows="3"

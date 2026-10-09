@@ -27,20 +27,25 @@ class UserController extends Controller implements HasMiddleware
     public function create()
     {
         $roles = Role::getAllOrdered();
+        $agencies = \App\Models\Master\Agency::where('is_active', true)->orderBy('name')->get();
+        $facilities = \App\Models\Master\Facility::where('is_active', true)->orderBy('name')->get();
 
-        return view('admin.users.create', compact('roles'));
+        return view('admin.users.create', compact('roles', 'agencies', 'facilities'));
     }
 
     public function store(Request $request)
     {
         $request->validate([
-            'name'      => 'required|string|max:100',
-            'email'     => 'required|email|unique:users,email',
-            'password'  => 'required|min:8|confirmed',
-            'role_id'   => 'nullable|exists:roles,id',
-            'phone'     => 'nullable|string|max:20',
-            'address'   => 'nullable|string|max:500',
-            'avatar'    => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'name'        => 'required|string|max:100',
+            'email'       => 'required|email|unique:users,email',
+            'password'    => 'required|min:8|confirmed',
+            'role_id'     => 'nullable|exists:roles,id',
+            'agency_id'   => 'nullable|exists:agencies,id',
+            'facility_id' => 'nullable|exists:facilities,id',
+            'user_type'   => 'nullable|in:CITIZEN,STAFF,FIELD',
+            'phone'       => 'nullable|string|max:20',
+            'address'     => 'nullable|string|max:500',
+            'avatar'      => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
         $avatarPath = null;
@@ -49,13 +54,16 @@ class UserController extends Controller implements HasMiddleware
         }
 
         $createdUser = User::create([
-            'name'     => $request->name,
-            'email'    => $request->email,
-            'password' => Hash::make($request->password),
-            'role_id'  => $request->role_id,
-            'phone'    => $request->phone,
-            'address'  => $request->address,
-            'avatar'   => $avatarPath,
+            'name'        => $request->name,
+            'email'       => $request->email,
+            'password'    => Hash::make($request->password),
+            'role_id'     => $request->role_id,
+            'agency_id'   => $request->agency_id,
+            'facility_id' => $request->facility_id,
+            'user_type'   => $request->user_type ?? 'STAFF',
+            'phone'       => $request->phone,
+            'address'     => $request->address,
+            'avatar'      => $avatarPath,
         ]);
 
         // Sync role pivot table
@@ -69,7 +77,7 @@ class UserController extends Controller implements HasMiddleware
 
     public function show(User $user)
     {
-        $user->load('role', 'roles');
+        $user->load('role', 'roles', 'agency', 'facility');
 
         return view('admin.users.show', compact('user'));
     }
@@ -77,29 +85,37 @@ class UserController extends Controller implements HasMiddleware
     public function edit(User $user)
     {
         $roles = Role::getAllOrdered();
-        $user->load('role', 'roles');
+        $agencies = \App\Models\Master\Agency::where('is_active', true)->orderBy('name')->get();
+        $facilities = \App\Models\Master\Facility::where('is_active', true)->orderBy('name')->get();
+        $user->load('role', 'roles', 'agency', 'facility');
 
-        return view('admin.users.edit', compact('user', 'roles'));
+        return view('admin.users.edit', compact('user', 'roles', 'agencies', 'facilities'));
     }
 
     public function update(Request $request, User $user)
     {
         $request->validate([
-            'name'     => 'required|string|max:100',
-            'email'    => 'required|email|unique:users,email,' . $user->id,
-            'password' => 'nullable|min:8|confirmed',
-            'role_id'  => 'nullable|exists:roles,id',
-            'phone'    => 'nullable|string|max:20',
-            'address'  => 'nullable|string|max:500',
-            'avatar'   => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'name'        => 'required|string|max:100',
+            'email'       => 'required|email|unique:users,email,' . $user->id,
+            'password'    => 'nullable|min:8|confirmed',
+            'role_id'     => 'nullable|exists:roles,id',
+            'agency_id'   => 'nullable|exists:agencies,id',
+            'facility_id' => 'nullable|exists:facilities,id',
+            'user_type'   => 'nullable|in:CITIZEN,STAFF,FIELD',
+            'phone'       => 'nullable|string|max:20',
+            'address'     => 'nullable|string|max:500',
+            'avatar'      => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
         $data = [
-            'name'    => $request->name,
-            'email'   => $request->email,
-            'role_id' => $request->role_id,
-            'phone'   => $request->phone,
-            'address' => $request->address,
+            'name'        => $request->name,
+            'email'       => $request->email,
+            'role_id'     => $request->role_id,
+            'agency_id'   => $request->agency_id,
+            'facility_id' => $request->facility_id,
+            'user_type'   => $request->user_type ?? $user->user_type,
+            'phone'       => $request->phone,
+            'address'     => $request->address,
         ];
 
         if ($request->filled('password')) {

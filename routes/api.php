@@ -16,6 +16,7 @@ Route::prefix('v1')->group(function () {
 
     // 3. Field Response App (Petugas Lapangan)
     Route::prefix('field')->group(function () {
+        Route::get('/facilities', [FieldOfficerController::class, 'getFacilities'])->name('api.v1.field.facilities');
         Route::get('/tasks', [FieldOfficerController::class, 'getMyTasks'])->name('api.v1.field.tasks');
         Route::post('/assignments/{ulid}/accept', [FieldOfficerController::class, 'acceptTask'])->name('api.v1.field.assignments.accept');
         Route::post('/assignments/{ulid}/reject', [FieldOfficerController::class, 'rejectTask'])->name('api.v1.field.assignments.reject');

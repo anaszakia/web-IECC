@@ -43,6 +43,12 @@ class PermissionSeeder extends Seeder
             ['name' => 'Edit Unit',    'slug' => 'units.edit'],
             ['name' => 'Hapus Unit',   'slug' => 'units.delete'],
 
+            // Master Facilities
+            ['name' => 'Lihat Fasilitas',   'slug' => 'facilities.view'],
+            ['name' => 'Buat Fasilitas',    'slug' => 'facilities.create'],
+            ['name' => 'Edit Fasilitas',    'slug' => 'facilities.edit'],
+            ['name' => 'Hapus Fasilitas',   'slug' => 'facilities.delete'],
+
             // Command Center
             ['name' => 'Lihat Command Center', 'slug' => 'command-center.view'],
             ['name' => 'Verifikasi Insiden',   'slug' => 'command-center.verify'],

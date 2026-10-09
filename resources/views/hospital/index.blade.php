@@ -120,9 +120,26 @@ window.testHospitalEmergencySound = function() {
     <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
             <h3 class="mb-1 fw-bold"><i class="ti ti-building-hospital me-2 text-primary"></i>Hospital Pre-Arrival Portal</h3>
-            <p class="text-muted mb-0" id="hosp-name-text">{{ $hospital ? $hospital->name : 'Portal IGD Rumah Sakit' }}</p>
+            <div class="d-flex align-items-center gap-2">
+                <span class="text-muted" id="hosp-name-text">{{ $hospital ? $hospital->name : 'Portal IGD Rumah Sakit' }}</span>
+                @if($hospital)
+                    <span class="badge bg-secondary-subtle text-secondary small">{{ $hospital->type }}</span>
+                @endif
+            </div>
         </div>
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            @if($isSuperAdmin && $allFacilities->count() > 1)
+                <form action="{{ route('hospital.index') }}" method="GET" class="d-inline-block me-2">
+                    <select name="facility_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                        @foreach($allFacilities as $fac)
+                            <option value="{{ $fac->id }}" {{ ($hospital?->id == $fac->id) ? 'selected' : '' }}>
+                                🏥 {{ $fac->name }} ({{ $fac->type }})
+                            </option>
+                        @endforeach
+                    </select>
+                </form>
+            @endif
+
             <span id="hosp-status-badge" class="badge bg-{{ $hospital?->er_status === 'NORMAL' ? 'success' : ($hospital?->er_status === 'BUSY' ? 'warning' : 'danger') }} fs-6 px-3 py-2">
                 Status IGD: {{ $hospital?->er_status ?? 'NORMAL' }}
             </span>
@@ -379,12 +396,15 @@ window.testHospitalEmergencySound = function() {
         startHospAlarmLoop();
     }
 
+    var currentFacilityId = '{{ $hospital?->id }}';
+
     window.syncHospitalData = async function() {
         if (isHospSyncing) return;
         isHospSyncing = true;
 
         try {
-            var res = await fetch('{{ route('hospital.data') }}', {
+            var url = '{{ route('hospital.data') }}' + (currentFacilityId ? '?facility_id=' + currentFacilityId : '');
+            var res = await fetch(url, {
                 headers: { 'Accept': 'application/json' }
             });
 
@@ -567,7 +587,10 @@ window.testHospitalEmergencySound = function() {
                 if (String(eventName).indexOf('pusher') === 0) return;
                 console.log('🚨 REVERB HOSPITAL EVENT:', eventName, data);
                 if (data) {
-                    showHandoverAlarmBanner(data);
+                    // Hanya bunyikan sirene / tampilkan banner jika rujukan ditujukan ke faskes yang sedang dibuka
+                    if (!currentFacilityId || String(data.facility_id) === String(currentFacilityId)) {
+                        showHandoverAlarmBanner(data);
+                    }
                 }
                 window.syncHospitalData();
             });
@@ -577,7 +600,9 @@ window.testHospitalEmergencySound = function() {
                 if (/handover/i.test(eventName)) {
                     console.log('🚨 REVERB HANDOVER ON CC:', eventName, data);
                     if (data) {
-                        showHandoverAlarmBanner(data);
+                        if (!currentFacilityId || String(data.facility_id) === String(currentFacilityId)) {
+                            showHandoverAlarmBanner(data);
+                        }
                     }
                     window.syncHospitalData();
                 }
