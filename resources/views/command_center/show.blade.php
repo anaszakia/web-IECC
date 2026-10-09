@@ -371,6 +371,27 @@
                             </div>
                         @endforeach
                     </div>
+
+                    {{-- Opsi Kerahkan Armada Tambahan Secara Manual --}}
+                    @if($availableUnits->isNotEmpty() && !in_array($incident->status, ['CLOSED', 'RESOLVED', 'FALSE_REPORT', 'DUPLICATE', 'CANCELLED', 'REJECTED']))
+                        <div class="mt-3 pt-3 border-top">
+                            <label class="form-label small fw-semibold text-muted mb-1">
+                                <i class="ti ti-plus me-1 text-primary"></i>Kerahkan Armada Tambahan (Multi-Unit):
+                            </label>
+                            <form action="{{ route('command-center.dispatch', $incident->ulid) }}" method="POST" class="d-flex gap-2">
+                                @csrf
+                                <select name="unit_id" class="form-select form-select-sm" required>
+                                    <option value="">-- Pilih Unit Tambahan --</option>
+                                    @foreach($availableUnits as $unit)
+                                        <option value="{{ $unit->id }}">{{ $unit->code }} ({{ $unit->type }}) - {{ $unit->agency->name }}</option>
+                                    @endforeach
+                                </select>
+                                <button type="submit" class="btn btn-sm btn-outline-primary text-nowrap">
+                                    <i class="ti ti-send me-1"></i> Kerahkan
+                                </button>
+                            </form>
+                        </div>
+                    @endif
                 @else
                     <div class="text-center py-3 text-muted">
                         <p class="small mb-2">Belum ada skor rekomendasi unit terdekat.</p>

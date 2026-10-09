@@ -75,10 +75,12 @@ class MobileAuthController extends Controller
                         'type' => $user->agency->type,
                     ] : null,
                     'unit'      => $assignedUnit ? [
+                        'id'         => $assignedUnit->id,
                         'ulid'       => $assignedUnit->ulid,
                         'code'       => $assignedUnit->code,
                         'type'       => $assignedUnit->type,
                         'status'     => $assignedUnit->status,
+                        'agency_id'  => $assignedUnit->agency_id,
                         'lat'        => (float) $assignedUnit->lat,
                         'lng'        => (float) $assignedUnit->lng,
                         'crew_ready' => (bool) $assignedUnit->crew_ready,

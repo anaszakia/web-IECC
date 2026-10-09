@@ -43,12 +43,18 @@ trait HasUlid
     }
 
     /**
-     * Retrieve the model for a bound value (supports both ULID and ID fallback).
+     * Retrieve the model for a bound value (supports both ULID and ID fallback safely without MySQL type coercion).
      */
     public function resolveRouteBinding($value, $field = null)
     {
-        return $this->where($field ?? 'ulid', $value)
-            ->orWhere('id', $value)
+        if ($field) {
+            return $this->where($field, $value)->first();
+        }
+
+        return $this->where('ulid', $value)
+            ->when(is_numeric($value), function ($q) use ($value) {
+                $q->orWhere('id', (int) $value);
+            })
             ->first();
     }
 

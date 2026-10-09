@@ -39,11 +39,12 @@ class FieldOfficerController extends Controller
 
     /**
      * GET /api/v1/field/tasks
-     * Ambil daftar penugasan aktif untuk armada/petugas
+     * Ambil daftar penugasan aktif untuk armada/petugas spesifik
      */
     public function getMyTasks(Request $request): JsonResponse
     {
         $unitId = $request->query('unit_id');
+        $unitUlid = $request->query('unit_ulid');
 
         $query = IncidentAssignment::with([
             'incident.media',
@@ -54,7 +55,14 @@ class FieldOfficerController extends Controller
         ->whereNotIn('status', ['RESOLVED', 'CANCELLED', 'REJECTED'])
         ->orderBy('created_at', 'desc');
 
-        if ($unitId) {
+        if ($unitUlid) {
+            $unit = Unit::where('ulid', $unitUlid)->first();
+            if ($unit) {
+                $query->where('unit_id', $unit->id);
+            } else {
+                return response()->json(['success' => true, 'data' => []]);
+            }
+        } elseif ($unitId) {
             $query->where('unit_id', $unitId);
         }
 
